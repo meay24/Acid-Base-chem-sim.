@@ -115,8 +115,10 @@ Mohammad Imad Ahmed
 
 ---
 
-#License
+## License
+
 This project is free for personal use, modification, and sharing as long as the original creator is clearly mentioned.
+
 Commercial use requires explicit written permission from the author.
 
 See the LICENSE file for details.
