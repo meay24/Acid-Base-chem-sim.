@@ -60,7 +60,9 @@ Kw = 1 × 10⁻¹⁴ (at 25°C)
 ## Getting started
 
 No installation required.
+Visit https://acidchemsim.xo.je/
 
+*Or if you prefer to run it locally:*
 1. Clone the repository:
    ```bash
    git clone https://github.com/your-username/acid-base-simulator.git
