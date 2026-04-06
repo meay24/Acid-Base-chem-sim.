@@ -1,9 +1,6 @@
-# Acid-Base-chem-sim.
-A small little chemistry simulator.
-
 # Acid–Base Simulator
 
-A browser-based chemistry simulator for exploring acid–base reactions and pH behavior in real time.
+A small, browser-based chemistry simulator for exploring acid–base reactions and pH behavior in real time.
 
 Built using HTML5 Canvas and vanilla JavaScript. No frameworks, no external libraries.
 
