@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acid-Base Simulator</title>
+<!--For record, this took me 4 Hours to write, and about 20+ hours to design and debug the physics and chemistry models.
+ I hope you find it useful for learning chemistry concepts, or just enjoy playing around with it! XD - Mohammad Imad Ahmed. -->
+  
+  <style>
+    :root {
+      --bg: #f3e9d2;
+      --bg-2: #e9dbc0;
+      --paper: #fffaf0;
+      --paper-2: #f8f1e1;
+      --ink: #2a2420;
+      --muted: #6d5f55;
+      --accent: #7a4d2d;
+      --accent-2: #3e6b5a;
+      --accent-3: #9b3c2f;
+      --glass: rgba(255,255,255,0.5);
+      --line: rgba(74,59,46,0.16);
+      --shadow: 0 18px 40px rgba(58,43,28,0.16);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.55), transparent 35%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(90,60,35,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(90,60,35,0.03) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mix-blend-mode: multiply;
+      opacity: 0.65;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 370px 1fr 310px;
+      gap: 14px;
+      height: 100vh;
+      padding: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(255,250,240,0.98), rgba(247,237,220,0.96));
+      border: 1px solid rgba(94,72,52,0.18);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .panel header {
+      padding: 16px 16px 10px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.34), rgba(255,255,255,0));
+    }
+
+    .title {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: 0.1px;
+      margin: 0 0 6px;
+      color: #2d2218;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .content {
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(250,242,228,0.94));
+      border: 1px solid rgba(109,95,85,0.14);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: 0.2px;
+      color: #2f241b;
+    }
+
+    .reaction {
+      display: grid;
+      gap: 10px;
+    }
+
+    .rx-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(122,77,45,0.06);
+      border: 1px dashed rgba(122,77,45,0.18);
+    }
+
+    .formula {
+      font-weight: 800;
+      font-size: 15px;
+      color: #3a2a1f;
+    }
+
+    .label-text {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 700;
+      color: #fffaf4;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+      box-shadow: 0 8px 18px rgba(65,41,25,0.18);
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(1px) scale(0.99); }
+    button.primary { background: linear-gradient(180deg, #8b5a3c, #6f4329); }
+    button.secondary { background: linear-gradient(180deg, #5f7368, #45564d); }
+    button.danger { background: linear-gradient(180deg, #9d4b41, #7c2f28); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .meter {
+      display: grid;
+      gap: 12px;
+    }
+
+    .meter-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .pH-value {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1;
+      color: #2c2219;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(255,255,255,0.62);
+      border: 1px solid rgba(109,95,85,0.18);
+      color: var(--ink);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      box-shadow: 0 0 10px rgba(62,107,90,0.65);
+    }
+
+    .meter-bar {
+      position: relative;
+      height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: linear-gradient(90deg, #b43b37 0%, #c67e2f 15%, #d4b233 33%, #78a64d 50%, #5da78d 67%, #5676b4 84%, #7a56b8 100%);
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: inset 0 1px 3px rgba(44,34,25,0.2);
+    }
+
+    .meter-pointer {
+      position: absolute;
+      top: -6px;
+      width: 4px;
+      height: 30px;
+      background: #fffaf0;
+      border-radius: 999px;
+      box-shadow: 0 0 14px rgba(255,250,240,0.8);
+      transform: translateX(-50%);
+    }
+
+    .scale-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.6);
+      border: 1px solid rgba(109,95,85,0.12);
+    }
+
+    .stat .k {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 5px;
+    }
+
+    .stat .v {
+      font-size: 20px;
+      font-weight: 900;
+      color: #30241a;
+    }
+
+    .sim-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .sim-stage {
+      position: relative;
+      width: min(100%, 920px);
+      height: min(100%, 820px);
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 50% 14%, rgba(121, 94, 66, 0.12), transparent 34%),
+        linear-gradient(180deg, #2a241d 0%, #1b1713 100%);
+      border: 1px solid rgba(119, 92, 64, 0.42);
+      overflow: hidden;
+      box-shadow: inset 0 0 100px rgba(255,255,255,0.03), 0 24px 64px rgba(54,39,24,0.32);
+    }
+
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .top-hud {
+      position: absolute;
+      inset: 16px 16px auto 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 3;
+      gap: 12px;
+    }
+
+    .hud-box {
+      pointer-events: auto;
+      background: rgba(255,250,240,0.14);
+      border: 1px solid rgba(255,250,240,0.16);
+      border-radius: 18px;
+      padding: 12px 14px;
+      backdrop-filter: blur(7px);
+      min-width: 220px;
+      color: #fff6eb;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+    }
+
+    .hud-title {
+      font-size: 12px;
+      color: rgba(255,245,233,0.72);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .hud-main {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .hud-sub {
+      margin-top: 4px;
+      color: rgba(255,245,233,0.74);
+      font-size: 12px;
+    }
+
+    .footer-note {
+      margin-top: auto;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .reaction-log {
+      max-height: 200px;
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      font-size: 12px;
+      color: #3a2b1f;
+    }
+
+    .log-item {
+      background: rgba(255,255,255,0.68);
+      border: 1px solid rgba(109,95,85,0.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .control-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .slider-row {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.64);
+      border: 1px solid rgba(109,95,85,0.12);
+    }
+
+    .slider-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #35281e;
+    }
+
+    .slider-value {
+      font-weight: 900;
+      color: var(--accent-3);
+    }
+
+    input[type='range'] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type='number'] {
+      width: 78px;
+      border: 1px solid rgba(109,95,85,0.18);
+      background: rgba(255,255,255,0.9);
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 7px 8px;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .mini-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    /* Reaction selector */
+    select.reaction-select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px dashed rgba(122,77,45,0.25);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.72);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    select.reaction-select:hover {
+      border-color: rgba(122,77,45,0.45);
+    }
+    select.reaction-select:focus {
+      border-color: var(--accent);
+    }
+
+    /* Strength badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .badge-strong {
+      background: rgba(155,60,47,0.13);
+      color: #9b3c2f;
+    }
+    .badge-weak {
+      background: rgba(180,140,40,0.15);
+      color: #8a6d2f;
+    }
+
+    .strength-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .strength-item {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .conc-display {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+    .conc-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .conc-item span:last-child {
+      font-weight: 800;
+      color: #35281e;
+      font-family: 'Courier New', monospace;
+    }
+
+    @media (max-width: 1200px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+      .sim-stage { height: 72vh; min-height: 520px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT PANEL -->
+    <section class="panel">
+      <header>
+        <h1 class="title">Acid-Base Notebook</h1>
+        <p class="subtitle">A chemistry simulation for exploring acid-base neutralization with real equilibrium chemistry.<br><br>By Mohammad Imad Ahmed, a normal 11th grader.
+          <br>Built with HTML5 Canvas and vanilla JavaScript, no libraries or frameworks.
+        </p>
+      </header>
+      <div class="content">
+        <div class="card reaction">
+          <h3>Experiment</h3>
+          <select class="reaction-select" id="reactionSelect">
+            <option value="hcl-naoh">HCl + NaOH &rarr; NaCl + H&#8322;O</option>
+            <option value="ch3cooh-naoh">CH&#8323;COOH + NaOH &rarr; CH&#8323;COONa + H&#8322;O</option>
+            <option value="hcl-nh3">HCl + NH&#8323; &rarr; NH&#8324;Cl + H&#8322;O</option>
+            <option value="hno3-koh">HNO&#8323; + KOH &rarr; KNO&#8323; + H&#8322;O</option>
+            <option value="hf-naoh">HF + NaOH &rarr; NaF + H&#8322;O</option>
+          </select>
+          <div class="rx-line">
+            <div>
+              <div class="formula" id="rxFormulaName">Hydrochloric acid + sodium hydroxide</div>
+              <div class="label-text" id="rxFormula">HCl + NaOH &rarr; NaCl + H&#8322;O</div>
+            </div>
+          </div>
+          <div class="strength-row" id="strengthRow">
+            <span class="strength-item" id="acidStrength">Acid: <span class="badge badge-strong">Strong</span></span>
+            <span class="strength-item" id="baseStrength">Base: <span class="badge badge-strong">Strong</span></span>
+          </div>
+          <div class="small" id="rxDesc">Both reagents fully dissociate. The net ionic equation is H&#8314; + OH&#8315; &rarr; H&#8322;O. Equivalence pH = 7.00.</div>
+        </div>
+
+        <div class="card">
+          <h3>Controls</h3>
+          <div class="btn-row">
+            <button class="primary" id="startBtn">Start</button>
+            <button class="secondary" id="pauseBtn">Pause</button>
+            <button class="secondary" id="resetBtn">Reset</button>
+          </div>
+          <div style="height:10px"></div>
+          <div class="small">Adjust molecule counts while the beaker is running. The reaction rebalances on the fly.</div>
+        </div>
+
+        <div class="card control-grid">
+          <h3>Molecule Controls</h3>
+          <div class="slider-row">
+            <div class="slider-head"><span id="acidSliderLabel">Acid molecules (HCl)</span><span class="slider-value" id="acidVal">48</span></div>
+            <input id="acidSlider" type="range" min="0" max="120" step="1" value="48" />
+            <div class="mini-row">
+              <span class="small">Set the number of acid particles.</span>
+              <input id="acidNumber" type="number" min="0" max="120" step="1" value="48" />
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-head"><span id="baseSliderLabel">Base molecules (NaOH)</span><span class="slider-value" id="baseVal">48</span></div>
+            <input id="baseSlider" type="range" min="0" max="120" step="1" value="48" />
+            <div class="mini-row">
+              <span class="small">Set the number of base particles.</span>
+              <input id="baseNumber" type="number" min="0" max="120" step="1" value="48" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card meter">
+          <h3>Live pH Viewer</h3>
+          <div class="meter-top">
+            <div>
+              <div class="pH-value" id="phValue">7.00</div>
+              <div class="small" id="phLabel">Neutral</div>
+            </div>
+            <div class="status-pill"><span class="dot" id="activityDot"></span><span id="activityText">Idle</span></div>
+          </div>
+          <div class="meter-bar"><div class="meter-pointer" id="phPointer"></div></div>
+          <div class="scale-row"><span>0</span><span>7</span><span>14</span></div>
+          <div class="conc-display">
+            <div class="conc-item"><span>[H&#8314;]</span><span id="hConc">1.00 &#215; 10&#8315;&#8311; M</span></div>
+            <div class="conc-item"><span>[OH&#8315;]</span><span id="ohConc">1.00 &#215; 10&#8315;&#8311; M</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Reaction Stats</h3>
+          <div class="stats-grid">
+            <div class="stat"><div class="k" id="statAcidLabel">HCl remaining</div><div class="v" id="hCount">48</div></div>
+            <div class="stat"><div class="k" id="statBaseLabel">NaOH remaining</div><div class="v" id="ohCount">48</div></div>
+            <div class="stat"><div class="k" id="statSaltLabel">NaCl formed</div><div class="v" id="saltCount">0</div></div>
+            <div class="stat"><div class="k">H&#8322;O formed</div><div class="v" id="waterCount">0</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Event Log</h3>
+          <div class="reaction-log" id="log"></div>
+        </div>
+
+        <div class="footer-note">
+          This simulator uses real dissociation constants (Ka, Kb) for accurate pH calculations. Each particle represents 0.001 mol/L. pH is computed at equilibrium using the Henderson-Hasselbalch equation, salt hydrolysis, or direct concentration for strong electrolytes.
+        </div>
+      </div>
+    </section>
+
+    <!-- CENTER: SIMULATION -->
+    <section class="sim-wrap">
+      <div class="sim-stage">
+        <div class="top-hud">
+          <div class="hud-box">
+            <div class="hud-title">Reaction State</div>
+            <div class="hud-main" id="stateText">Waiting to begin</div>
+            <div class="hud-sub" id="stateSub">Press Start to release the particles.</div>
+          </div>
+          <div class="hud-box" style="min-width: 240px; text-align:right;">
+            <div class="hud-title">Active Reaction</div>
+            <div class="hud-main" id="hudReaction">HCl + NaOH</div>
+            <div class="hud-sub" id="hudProducts">&rarr; NaCl + H&#8322;O</div>
+          </div>
+        </div>
+        <canvas id="canvas"></canvas>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL -->
+    <section class="panel">
+      <header>
+        <h1 class="title">Molecule Viewer</h1>
+        <p class="subtitle">Particles drift, collide, and react inside the beaker.</p>
+      </header>
+      <div class="content">
+        <div class="card">
+          <h3>Legend</h3>
+          <div class="small" id="legendContent">
+            <div>&#8226; <span id="legendAcidColor" style="color:#a54836;font-weight:800;">Rust spheres</span>: acid particles (HCl)</div>
+            <div>&#8226; <span id="legendBaseColor" style="color:#4f7f67;font-weight:800;">Sage spheres</span>: base particles (NaOH)</div>
+            <div>&#8226; <span id="legendSaltColor" style="color:#6f7f43;font-weight:800;">Olive clusters</span>: salt (NaCl)</div>
+            <div>&#8226; <span style="color:#2c8c8d;font-weight:800;">Teal droplets</span>: water (H&#8322;O)</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>What the model does</h3>
+          <div class="small" id="modelDesc">
+            Particles bounce in the beaker. When acid and base collide, they neutralize and are replaced by product particles. Strong electrolytes react readily on collision; weak acids and bases react more slowly, reflecting their partial dissociation in water.
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Reaction Chemistry</h3>
+          <div class="small" id="reactionNotes">
+            <strong>Net ionic equation:</strong> H&#8314; + OH&#8315; &rarr; H&#8322;O<br><br>
+            Both HCl and NaOH are strong electrolytes that fully dissociate in water. The equivalence point occurs at pH 7.00 because neither Na&#8314; nor Cl&#8315; hydrolyzes water.
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>pH Calculation Method</h3>
+          <div class="small" id="phMethod">
+            <strong>Strong + Strong:</strong> pH = &minus;log[H&#8314;] or 14 + log[OH&#8315;] from excess concentration. At equivalence, [H&#8314;] = [OH&#8315;] = 10&#8315;&#8311;, so pH = 7.00.
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    /* ================================================================
+       CONSTANTS
+       ================================================================ */
+    const Kw = 1e-14;       // water autoionization at 25 °C
+    const SCALE = 0.001;    // 1 particle ≈ 0.001 mol/L
+
+    /* ================================================================
+       REACTION DATABASE — real chemistry constants
+       ================================================================ */
+    const reactions = {
+      'hcl-naoh': {
+        name: 'Hydrochloric acid + Sodium hydroxide',
+        formulaHTML: 'HCl + NaOH &rarr; NaCl + H&#8322;O',
+        formulaDisplay: 'Hydrochloric acid + sodium hydroxide',
+        hudReaction: 'HCl + NaOH',
+        hudProducts: '&rarr; NaCl + H\u2082O',
+        acidLabel: 'HCl',
+        acidFullName: 'Hydrochloric acid (HCl)',
+        baseLabel: 'NaOH',
+        baseFullName: 'Sodium hydroxide (NaOH)',
+        acidType: 'strong',
+        baseType: 'strong',
+        pKa: -7,
+        pKb: -1.7,
+        Ka: 1e7,
+        Kb: 50.1,
+        saltLabel: 'NaCl',
+        saltFullName: 'Sodium chloride (NaCl)',
+        description: 'Both reagents are strong electrolytes that fully dissociate in water: HCl &rarr; H\u207A + Cl\u207B and NaOH &rarr; Na\u207A + OH\u207B. The net ionic equation is H\u207A + OH\u207B &rarr; H\u2082O. Equivalence pH = 7.00 at 25 \u00B0C.',
+        acidColor: '#a54836',
+        baseColor: '#4f7f67',
+        saltColor: '#6f7f43',
+        reactionProb: 0.92,
+        acidSliderLabel: 'Acid molecules (HCl)',
+        baseSliderLabel: 'Base molecules (NaOH)',
+        reactionNotes: '<strong>Net ionic equation:</strong> H\u207A + OH\u207B &rarr; H\u2082O<br><br>Both HCl and NaOH are strong electrolytes that fully dissociate. The equivalence point is exactly pH 7.00 because neither Na\u207A nor Cl\u207B hydrolyzes water.',
+        phMethod: '<strong>Strong + Strong:</strong> pH = &minus;log[H\u207A] (excess acid) or 14 + log[OH\u207B] (excess base) from stoichiometric excess. At equivalence [H\u207A] = [OH\u207B] = 10\u207B\u2077 M, so pH = 7.00.',
+      },
+      'ch3cooh-naoh': {
+        name: 'Acetic acid + Sodium hydroxide',
+        formulaHTML: 'CH&#8323;COOH + NaOH &rarr; CH&#8323;COONa + H&#8322;O',
+        formulaDisplay: 'Acetic acid + sodium hydroxide',
+        hudReaction: 'CH\u2083COOH + NaOH',
+        hudProducts: '\u2192 CH\u2083COONa + H\u2082O',
+        acidLabel: 'CH\u2083COOH',
+        acidFullName: 'Acetic acid (CH\u2083COOH)',
+        baseLabel: 'NaOH',
+        baseFullName: 'Sodium hydroxide (NaOH)',
+        acidType: 'weak',
+        baseType: 'strong',
+        pKa: 4.76,
+        pKb: -1.7,
+        Ka: 1.74e-5,
+        Kb: 50.1,
+        saltLabel: 'CH\u2083COONa',
+        saltFullName: 'Sodium acetate (CH\u2083COONa)',
+        description: 'Acetic acid is a weak acid (K\u2090 = 1.74 \u00D7 10\u207B\u2075) that only partially dissociates. The titration with strong NaOH produces a buffer region before equivalence. At equivalence, pH > 7 because CH\u2083COO\u207B hydrolyzes water.',
+        acidColor: '#b57832',
+        baseColor: '#4f7f67',
+        saltColor: '#8a7f43',
+        reactionProb: 0.28,
+        acidSliderLabel: 'Acid molecules (CH\u2083COOH)',
+        baseSliderLabel: 'Base molecules (NaOH)',
+        reactionNotes: '<strong>Net ionic equation:</strong> CH\u2083COOH + OH\u207B \u2192 CH\u2083COO\u207B + H\u2082O<br><br>Before equivalence the solution is a buffer (Henderson\u2013Hasselbalch applies). At equivalence the pH is governed by acetate hydrolysis: CH\u2083COO\u207B + H\u2082O \u21CC CH\u2083COOH + OH\u207B (K\u1D47 = K\u2098/K\u2090 = 5.75 \u00D7 10\u207B\u00B9\u2070).',
+        phMethod: '<strong>Weak acid + Strong base:</strong><br>\u2022 Buffer region: pH = pK\u2090 + log([A\u207B]/[HA]) (Henderson\u2013Hasselbalch)<br>\u2022 At equivalence: [OH\u207B] = \u221A(K\u2098/K\u2090 \u00D7 C\u209B\u2090\u2097\u209C), pH = 14 + log[OH\u207B]<br>\u2022 Past equivalence: excess [OH\u207B] from NaOH dominates.',
+      },
+      'hcl-nh3': {
+        name: 'Hydrochloric acid + Ammonia',
+        formulaHTML: 'HCl + NH&#8323; &rarr; NH&#8324;Cl + H&#8322;O',
+        formulaDisplay: 'Hydrochloric acid + ammonia',
+        hudReaction: 'HCl + NH\u2083',
+        hudProducts: '\u2192 NH\u2084Cl + H\u2082O',
+        acidLabel: 'HCl',
+        acidFullName: 'Hydrochloric acid (HCl)',
+        baseLabel: 'NH\u2083',
+        baseFullName: 'Ammonia (NH\u2083)',
+        acidType: 'strong',
+        baseType: 'weak',
+        pKa: -7,
+        pKb: 4.75,
+        Ka: 1e7,
+        Kb: 1.78e-5,
+        saltLabel: 'NH\u2084Cl',
+        saltFullName: 'Ammonium chloride (NH\u2084Cl)',
+        description: 'HCl fully dissociates while ammonia is a weak base (K\u1D47 = 1.78 \u00D7 10\u207B\u2075). The pH at equivalence is below 7 because NH\u2084\u207A acts as a weak acid: NH\u2084\u207A + H\u2082O \u21CC NH\u2083 + H\u2083O\u207A.',
+        acidColor: '#a54836',
+        baseColor: '#3f7a8c',
+        saltColor: '#437f6f',
+        reactionProb: 0.28,
+        acidSliderLabel: 'Acid molecules (HCl)',
+        baseSliderLabel: 'Base molecules (NH\u2083)',
+        reactionNotes: '<strong>Net ionic equation:</strong> H\u207A + NH\u2083 \u2192 NH\u2084\u207A<br><br>Before equivalence the solution is a buffer of NH\u2083/NH\u2084\u207A. At equivalence the pH is governed by ammonium hydrolysis: NH\u2084\u207A + H\u2082O \u21CC NH\u2083 + H\u2083O\u207A (K\u2090 = K\u2098/K\u1D47 = 5.62 \u00D7 10\u207B\u00B9\u2070).',
+        phMethod: '<strong>Strong acid + Weak base:</strong><br>\u2022 Buffer region: pH = pK\u2090(NH\u2084\u207A) + log([NH\u2083]/[NH\u2084\u207A])<br>\u2022 At equivalence: [H\u207A] = \u221A(K\u2098/K\u1D47 \u00D7 C\u209B\u2090\u2097\u209C), pH &lt; 7<br>\u2022 Past equivalence: excess [H\u207A] from HCl dominates.',
+      },
+      'hno3-koh': {
+        name: 'Nitric acid + Potassium hydroxide',
+        formulaHTML: 'HNO&#8323; + KOH &rarr; KNO&#8323; + H&#8322;O',
+        formulaDisplay: 'Nitric acid + potassium hydroxide',
+        hudReaction: 'HNO\u2083 + KOH',
+        hudProducts: '\u2192 KNO\u2083 + H\u2082O',
+        acidLabel: 'HNO\u2083',
+        acidFullName: 'Nitric acid (HNO\u2083)',
+        baseLabel: 'KOH',
+        baseFullName: 'Potassium hydroxide (KOH)',
+        acidType: 'strong',
+        baseType: 'strong',
+        pKa: -1.4,
+        pKb: -1.7,
+        Ka: 25.1,
+        Kb: 50.1,
+        saltLabel: 'KNO\u2083',
+        saltFullName: 'Potassium nitrate (KNO\u2083)',
+        description: 'Both are strong electrolytes: HNO\u2083 \u2192 H\u207A + NO\u2083\u207B and KOH \u2192 K\u207A + OH\u207B. The net ionic equation is identical to HCl + NaOH. Equivalence pH = 7.00.',
+        acidColor: '#8f5a30',
+        baseColor: '#4f7f67',
+        saltColor: '#7f6f53',
+        reactionProb: 0.92,
+        acidSliderLabel: 'Acid molecules (HNO\u2083)',
+        baseSliderLabel: 'Base molecules (KOH)',
+        reactionNotes: '<strong>Net ionic equation:</strong> H\u207A + OH\u207B \u2192 H\u2082O<br><br>Identical chemistry to HCl + NaOH. Both are strong electrolytes; KNO\u2083 is a neutral salt. The titration curve has the same shape.',
+        phMethod: '<strong>Strong + Strong:</strong> Same calculation as HCl + NaOH. pH determined by excess [H\u207A] or [OH\u207B]. At equivalence, pH = 7.00.',
+      },
+      'hf-naoh': {
+        name: 'Hydrofluoric acid + Sodium hydroxide',
+        formulaHTML: 'HF + NaOH &rarr; NaF + H&#8322;O',
+        formulaDisplay: 'Hydrofluoric acid + sodium hydroxide',
+        hudReaction: 'HF + NaOH',
+        hudProducts: '\u2192 NaF + H\u2082O',
+        acidLabel: 'HF',
+        acidFullName: 'Hydrofluoric acid (HF)',
+        baseLabel: 'NaOH',
+        baseFullName: 'Sodium hydroxide (NaOH)',
+        acidType: 'weak',
+        baseType: 'strong',
+        pKa: 3.17,
+        pKb: -1.7,
+        Ka: 6.76e-4,
+        Kb: 50.1,
+        saltLabel: 'NaF',
+        saltFullName: 'Sodium fluoride (NaF)',
+        description: 'HF is a weak acid (K\u2090 = 6.76 \u00D7 10\u207B\u2074), stronger than acetic acid. Despite being classified as "weak," concentrated HF is extremely hazardous. At equivalence, F\u207B hydrolyzes water, producing a basic solution.',
+        acidColor: '#5a8f70',
+        baseColor: '#4f7f67',
+        saltColor: '#6f8f63',
+        reactionProb: 0.40,
+        acidSliderLabel: 'Acid molecules (HF)',
+        baseSliderLabel: 'Base molecules (NaOH)',
+        reactionNotes: '<strong>Net ionic equation:</strong> HF + OH\u207B \u2192 F\u207B + H\u2082O<br><br>HF is a relatively strong weak acid (K\u2090 = 6.76 \u00D7 10\u207B\u2074, pK\u2090 = 3.17). At equivalence the fluoride ion hydrolyzes: F\u207B + H\u2082O \u21CC HF + OH\u207B (K\u1D47 = 1.48 \u00D7 10\u207B\u00B9\u00B9).',
+        phMethod: '<strong>Weak acid + Strong base:</strong><br>\u2022 Buffer region: pH = pK\u2090(3.17) + log([F\u207B]/[HF])<br>\u2022 At equivalence: [OH\u207B] = \u221A(K\u2098/K\u2090 \u00D7 C), pH &gt; 7<br>\u2022 Past equivalence: excess [OH\u207B] dominates.',
+      }
+    };
+
+    /* ================================================================
+       STATE 
+       ================================================================ */
+    // Current reaction key
+    let currentReaction = 'hcl-naoh';
+    let totalAcid = 48;   // total acid moles (in particle units) — set by slider
+    let totalBase = 48;   // total base moles (in particle units) — set by slider
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+// UI elements
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const reactionSelect = document.getElementById('reactionSelect');
+// Acid/base controls
+    const acidSlider = document.getElementById('acidSlider');
+    const baseSlider = document.getElementById('baseSlider');
+    const acidNumber = document.getElementById('acidNumber');
+    const baseNumber = document.getElementById('baseNumber');
+    const acidVal = document.getElementById('acidVal');
+    const baseVal = document.getElementById('baseVal');
+// pH meter elements
+    const phValue = document.getElementById('phValue');
+    const phLabel = document.getElementById('phLabel');
+    const phPointer = document.getElementById('phPointer');
+    const activityText = document.getElementById('activityText');
+    const activityDot = document.getElementById('activityDot');
+    const hCountEl = document.getElementById('hCount');
+    const ohCountEl = document.getElementById('ohCount');
+    const saltCountEl = document.getElementById('saltCount');
+    const waterCountEl = document.getElementById('waterCount');
+    const stateText = document.getElementById('stateText');
+    const stateSub = document.getElementById('stateSub');
+    const logEl = document.getElementById('log');
+
+    let W = 0, H = 0;
+    let running = false;
+    let paused = false;
+    let t = 0;
+    let last = performance.now();
+
+    const beaker = { x: 0, y: 0, w: 0, h: 0, innerX: 0, innerY: 0, innerW: 0, innerH: 0 };
+
+    const counts = { H: 48, OH: 48, salt: 0, water: 0 };
+
+    const particles = [];
+    let idCounter = 0;
+
+    /* ================================================================
+       UTILITY
+       ================================================================ */
+    function log(msg) {
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      item.textContent = msg;
+      logEl.prepend(item);
+      while (logEl.children.length > 6) logEl.removeChild(logEl.lastChild);
+    }
+
+    function resize() {
+      const stage = canvas.parentElement;
+      const rect = stage.getBoundingClientRect();
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      W = rect.width;
+      H = rect.height;
+      const bw = Math.min(W * 0.46, 430);
+      const bh = Math.min(H * 0.68, 560);
+      beaker.w = bw;
+      beaker.h = bh;
+      beaker.x = (W - bw) / 2;
+      beaker.y = H * 0.16;
+      beaker.innerX = beaker.x + bw * 0.10;
+      beaker.innerY = beaker.y + bh * 0.12;
+      beaker.innerW = bw * 0.80;
+      beaker.innerH = bh * 0.78;
+    }
+
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function formatSci(val) {
+      if (val <= 0) return '0 M';
+      const exp = Math.floor(Math.log10(val));
+      const mantissa = val / Math.pow(10, exp);
+      if (exp >= -3 && exp <= 3) return val.toPrecision(3) + ' M';
+      const sup = String(exp).replace(/-/g, '\u207B').replace(/0/g, '\u2070').replace(/1/g, '\u00B9').replace(/2/g, '\u00B2').replace(/3/g, '\u00B3').replace(/4/g, '\u2074').replace(/5/g, '\u2075').replace(/6/g, '\u2076').replace(/7/g, '\u2077').replace(/8/g, '\u2078').replace(/9/g, '\u2079');
+      return mantissa.toFixed(2) + ' \u00D7 10' + sup + ' M';
+    }
+
+    /* ================================================================
+       pH CALCULATION — real equilibrium chemistry
+       ================================================================ */
+    function calculatePH() {
+      const rxn = reactions[currentReaction];
+      const aC = totalAcid * SCALE;   // acid concentration (mol/L)
+      const bC = totalBase * SCALE;   // base concentration (mol/L)
+      const isStrongAcid = rxn.acidType === 'strong';
+      const isStrongBase = rxn.baseType === 'strong';
+      const Ka = rxn.Ka;
+      const Kb = rxn.Kb;
+
+      let pH = 7.0;
+
+      if (aC < 1e-15 && bC < 1e-15) return 7.0;
+
+      if (isStrongAcid && isStrongBase) {
+        // ── Strong acid + Strong base ──
+        // Both fully dissociate; reaction goes to completion.
+        const excessH = aC - bC;
+        if (Math.abs(excessH) < 1e-14) {
+          pH = 7.0;
+        } else if (excessH > 0) {
+          pH = -Math.log10(Math.max(excessH, 1e-14));
+        } else {
+          const excessOH = -excessH;
+          pH = 14.0 + Math.log10(Math.max(excessOH, 1e-14));
+        }
+
+      } else if (!isStrongAcid && isStrongBase) {
+        // ── Weak acid + Strong base ──
+        // Strong base reacts completely with weak acid (1 : 1).
+        const reacted = Math.min(aC, bC);
+        const remainingHA = aC - reacted;   // unreacted weak acid
+        const formedA    = reacted;          // conjugate base produced
+        const excessOH   = bC - reacted;     // leftover strong base
+
+        if (excessOH > 1e-10) {
+          // Excess OH⁻ dominates
+          pH = 14.0 + Math.log10(Math.max(excessOH, 1e-14));
+        } else if (remainingHA > 1e-10 && formedA > 1e-10) {
+          // Buffer region — Henderson-Hasselbalch
+          pH = rxn.pKa + Math.log10(formedA / remainingHA);
+        } else if (remainingHA > 1e-10) {
+          // Pure weak acid (no base yet)
+          const H = Math.sqrt(Ka * remainingHA);
+          pH = -Math.log10(Math.max(H, 1e-14));
+        } else if (formedA > 1e-10) {
+          // At equivalence — salt hydrolysis: A⁻ + H₂O ⇌ HA + OH⁻
+          const Kb_salt = Kw / Ka;
+          const OH = Math.sqrt(Kb_salt * formedA);
+          pH = 14.0 + Math.log10(Math.max(OH, 1e-14));
+        } else {
+          pH = 7.0;
+        }
+
+      } else if (isStrongAcid && !isStrongBase) {
+        // ── Strong acid + Weak base ──
+        const reacted = Math.min(aC, bC);
+        const remainingB = bC - reacted;     // unreacted weak base
+        const formedBH  = reacted;           // conjugate acid (BH⁺)
+        const excessH   = aC - reacted;      // leftover strong acid
+
+        if (excessH > 1e-10) {
+          pH = -Math.log10(Math.max(excessH, 1e-14));
+        } else if (remainingB > 1e-10 && formedBH > 1e-10) {
+          // Buffer region — Henderson-Hasselbalch for B/BH⁺
+          const pKa_BH = 14.0 - rxn.pKb;
+          pH = pKa_BH + Math.log10(remainingB / formedBH);
+        } else if (remainingB > 1e-10) {
+          // Pure weak base
+          const OH = Math.sqrt(Kb * remainingB);
+          pH = 14.0 + Math.log10(Math.max(OH, 1e-14));
+        } else if (formedBH > 1e-10) {
+          // At equivalence — BH⁺ hydrolysis
+          const Ka_salt = Kw / Kb;
+          const Hconc = Math.sqrt(Ka_salt * formedBH);
+          pH = -Math.log10(Math.max(Hconc, 1e-14));
+        } else {
+          pH = 7.0;
+        }
+
+      } else {
+        // ── Weak acid + Weak base ── (future expansion)
+        if (aC > bC + 1e-10) {
+          const excess = aC - bC;
+          const Hconc = Math.sqrt(Ka * excess);
+          pH = -Math.log10(Math.max(Hconc, 1e-14));
+        } else if (bC > aC + 1e-10) {
+          const excess = bC - aC;
+          const OH = Math.sqrt(Kb * excess);
+          pH = 14.0 + Math.log10(Math.max(OH, 1e-14));
+        } else {
+          pH = (rxn.pKa + 14.0 - rxn.pKb) / 2;
+        }
+      }
+
+      return clamp(pH, 0, 14);
+    }
+
+    /* ================================================================
+       DYNAMIC UI — update all labels when reaction changes
+       ================================================================ */
+    function updateAllLabels() {
+      const rxn = reactions[currentReaction];
+
+      // Experiment card
+      document.getElementById('rxFormulaName').textContent = rxn.formulaDisplay;
+      document.getElementById('rxFormula').innerHTML = rxn.formulaHTML;
+      document.getElementById('rxDesc').innerHTML = rxn.description;
+
+      // Strength badges
+      const acidStrEl = document.getElementById('acidStrength');
+      acidStrEl.innerHTML = 'Acid: <span class="badge ' + (rxn.acidType === 'strong' ? 'badge-strong' : 'badge-weak') + '">' + (rxn.acidType === 'strong' ? 'Strong' : 'Weak') + '</span>';
+      const baseStrEl = document.getElementById('baseStrength');
+      baseStrEl.innerHTML = 'Base: <span class="badge ' + (rxn.baseType === 'strong' ? 'badge-strong' : 'badge-weak') + '">' + (rxn.baseType === 'strong' ? 'Strong' : 'Weak') + '</span>';
+
+      // Slider labels
+      document.getElementById('acidSliderLabel').textContent = rxn.acidSliderLabel;
+      document.getElementById('baseSliderLabel').textContent = rxn.baseSliderLabel;
+
+      // Stats labels
+      document.getElementById('statAcidLabel').textContent = rxn.acidLabel + ' remaining';
+      document.getElementById('statBaseLabel').textContent = rxn.baseLabel + ' remaining';
+      document.getElementById('statSaltLabel').textContent = rxn.saltLabel + ' formed';
+
+      // HUD
+      document.getElementById('hudReaction').textContent = rxn.hudReaction;
+      document.getElementById('hudProducts').innerHTML = rxn.hudProducts;
+
+      // Legend
+      document.getElementById('legendAcidColor').textContent = rxn.acidType === 'strong' ? 'Spheres' : 'Spheres';
+      document.getElementById('legendAcidColor').style.color = rxn.acidColor;
+      document.getElementById('legendBaseColor').style.color = rxn.baseColor;
+      document.getElementById('legendSaltColor').style.color = rxn.saltColor;
+      document.getElementById('legendContent').innerHTML =
+        '<div>\u2022 <span style="color:' + rxn.acidColor + ';font-weight:800;">Spheres</span>: acid (' + rxn.acidLabel + ')</div>' +
+        '<div>\u2022 <span style="color:' + rxn.baseColor + ';font-weight:800;">Spheres</span>: base (' + rxn.baseLabel + ')</div>' +
+        '<div>\u2022 <span style="color:' + rxn.saltColor + ';font-weight:800;">Clusters</span>: salt (' + rxn.saltLabel + ')</div>' +
+        '<div>\u2022 <span style="color:#2c8c8d;font-weight:800;">Droplets</span>: water (H\u2082O)</div>';
+
+      // Reaction notes
+      document.getElementById('reactionNotes').innerHTML = rxn.reactionNotes;
+      document.getElementById('phMethod').innerHTML = rxn.phMethod;
+    }
+
+    /* ================================================================
+       REACTION SWITCHING
+       ================================================================ */
+    function switchReaction(key) {
+      currentReaction = key;
+      running = false;
+      paused = false;
+      startBtn.disabled = false;
+      pauseBtn.textContent = 'Pause';
+      totalAcid = 48;
+      totalBase = 48;
+      counts.H = 48;
+      counts.OH = 48;
+      counts.salt = 0;
+      counts.water = 0;
+      t = 0;
+      updateAllLabels();
+      syncUIControls();
+      updatePH();
+      initParticles();
+      stateText.textContent = 'Waiting to begin';
+      stateSub.textContent = 'Press Start to release the particles.';
+      activityText.textContent = 'Idle';
+      activityDot.style.background = '#8a7260';
+      activityDot.style.boxShadow = '0 0 10px rgba(138,114,96,0.55)';
+      logEl.innerHTML = '';
+      const rxn = reactions[key];
+      log('Switched to: ' + rxn.formulaDisplay);
+      log(rxn.acidType === 'strong' ? 'Strong acid selected.' : 'Weak acid (pKa = ' + rxn.pKa + ') selected.');
+      log(rxn.baseType === 'strong' ? 'Strong base selected.' : 'Weak base (pKb = ' + rxn.pKb + ') selected.');
+    }
+
+    reactionSelect.addEventListener('change', e => switchReaction(e.target.value));
+
+    /* ================================================================
+       PARTICLE SYSTEM
+       ================================================================ */
+    function createParticle(type, x, y) {
+      const rxn = reactions[currentReaction];
+      const colorMap = { H: rxn.acidColor, OH: rxn.baseColor, salt: rxn.saltColor, water: '#2c8c8d' };
+      const radiusMap = { H: 7, OH: 8, salt: 9, water: 6 };
+      const speed = type === 'salt' ? 0.5 : type === 'water' ? 0.55 : 1.05;
+      const angle = rand(0, Math.PI * 2);
+      return {
+        id: ++idCounter,
+        type,
+        x, y,
+        vx: Math.cos(angle) * rand(0.25, speed),
+        vy: Math.sin(angle) * rand(0.25, speed),
+        r: radiusMap[type],
+        color: colorMap[type],
+        phase: rand(0, Math.PI * 2),
+      };
+    }
+
+    function initParticles() {
+      particles.length = 0;
+      for (let i = 0; i < counts.H; i++) {
+        particles.push(createParticle('H',
+          rand(beaker.innerX, beaker.innerX + beaker.innerW * 0.45),
+          rand(beaker.innerY, beaker.innerY + beaker.innerH)));
+      }
+      for (let i = 0; i < counts.OH; i++) {
+        particles.push(createParticle('OH',
+          rand(beaker.innerX + beaker.innerW * 0.55, beaker.innerX + beaker.innerW),
+          rand(beaker.innerY, beaker.innerY + beaker.innerH)));
+      }
+    }
+
+    function rebuildSide(type, newCount) {
+      const current = type === 'H' ? counts.H : counts.OH;
+      const diff = newCount - current;
+      const pType = type === 'H' ? 'H' : 'OH';
+
+      if (diff > 0) {
+        for (let i = 0; i < diff; i++) {
+          particles.push(createParticle(pType,
+            rand(beaker.innerX, beaker.innerX + beaker.innerW),
+            rand(beaker.innerY, beaker.innerY + beaker.innerH)));
+        }
+      } else if (diff < 0) {
+        let toRemove = Math.abs(diff);
+        for (let i = particles.length - 1; i >= 0 && toRemove > 0; i--) {
+          if (particles[i].type === pType) { particles.splice(i, 1); toRemove--; }
+        }
+      }
+
+      if (type === 'H') counts.H = newCount;
+      else counts.OH = newCount;
+
+      syncUIControls();
+      log((type === 'H' ? 'Acid' : 'Base') + ' set to ' + newCount + ' particles.');
+      if (running && !paused) stateSub.textContent = 'The mix shifted — the beaker is rebalancing.';
+    }
+
+    /* ================================================================
+       UI SYNC
+       ================================================================ */
+    function syncUIControls() {
+      acidVal.textContent = String(totalAcid);
+      baseVal.textContent = String(totalBase);
+      acidSlider.value = String(totalAcid);
+      baseSlider.value = String(totalBase);
+      acidNumber.value = String(totalAcid);
+      baseNumber.value = String(totalBase);
+      updateUI();
+      updatePH();
+      updateReactionState();
+    }
+
+    function updateUI() {
+      hCountEl.textContent = counts.H;
+      ohCountEl.textContent = counts.OH;
+      saltCountEl.textContent = counts.salt;
+      waterCountEl.textContent = counts.water;
+    }
+
+    function updatePH() {
+      const pH = calculatePH();
+      phValue.textContent = pH.toFixed(2);
+      const left = (pH / 14) * 100;
+      phPointer.style.left = left + '%';
+
+      // Compute [H⁺] and [OH⁻] from pH
+      const hConc = Math.pow(10, -pH);
+      const ohConc = Kw / hConc;
+      document.getElementById('hConc').textContent = formatSci(hConc);
+      document.getElementById('ohConc').textContent = formatSci(ohConc);
+
+      let label, status, dot, glow;
+      if (pH < 3) {
+        label = 'Strongly acidic'; status = 'Reactive'; dot = '#9d4b41'; glow = '0 0 10px rgba(157,75,65,0.75)';
+      } else if (pH < 6.5) {
+        label = 'Acidic'; status = 'Reactive'; dot = '#c67e2f'; glow = '0 0 10px rgba(198,126,47,0.75)';
+      } else if (pH <= 7.5) {
+        label = 'Near neutral'; status = 'Calming'; dot = '#3e6b5a'; glow = '0 0 10px rgba(62,107,90,0.7)';
+      } else if (pH <= 11) {
+        label = 'Basic'; status = 'Reactive'; dot = '#5676b4'; glow = '0 0 10px rgba(86,118,180,0.75)';
+      } else {
+        label = 'Strongly basic'; status = 'Reactive'; dot = '#7a56b8'; glow = '0 0 10px rgba(122,86,184,0.75)';
+      }
+      phLabel.textContent = label;
+      activityText.textContent = status;
+      activityDot.style.background = dot;
+      activityDot.style.boxShadow = glow;
+    }
+
+    function updateReactionState() {
+      const pH = calculatePH();
+      const rxn = reactions[currentReaction];
+      if (!running) {
+        stateText.textContent = 'Waiting to begin';
+        stateSub.textContent = 'Press Start to release the particles.';
+      } else if (counts.H === 0 && counts.OH === 0) {
+        stateText.textContent = 'Fully neutralized';
+        stateSub.textContent = 'All ' + rxn.acidLabel + ' and ' + rxn.baseLabel + ' have reacted.';
+      } else if (counts.H === 0) {
+        stateText.textContent = rxn.baseLabel + ' in excess';
+        stateSub.textContent = 'Free ' + rxn.baseLabel + ' remains \u2014 the solution is basic.';
+      } else if (counts.OH === 0) {
+        stateText.textContent = rxn.acidLabel + ' in excess';
+        stateSub.textContent = 'Free ' + rxn.acidLabel + ' remains \u2014 the solution is acidic.';
+      } else if (pH > 6.5 && pH < 7.5) {
+        stateText.textContent = 'Approaching neutral';
+        stateSub.textContent = 'The solution is balancing toward pH 7.';
+      } else {
+        stateText.textContent = 'Reaction in motion';
+        stateSub.textContent = 'Particles are colliding and exchanging partners.';
+      }
+    }
+
+    function reset() {
+      running = false;
+      paused = false;
+      startBtn.disabled = false;
+      pauseBtn.textContent = 'Pause';
+      totalAcid = 48;
+      totalBase = 48;
+      counts.H = 48;
+      counts.OH = 48;
+      counts.salt = 0;
+      counts.water = 0;
+      t = 0;
+      initParticles();
+      syncUIControls();
+      logEl.innerHTML = '';
+      const rxn = reactions[currentReaction];
+      log('Loaded ' + rxn.acidFullName + ' and ' + rxn.baseFullName + '.');
+      log('Neutralization is ready.');
+      stateText.textContent = 'Waiting to begin';
+      stateSub.textContent = 'Press Start to release the particles.';
+      activityText.textContent = 'Idle';
+      activityDot.style.background = '#8a7260';
+      activityDot.style.boxShadow = '0 0 10px rgba(138,114,96,0.55)';
+    }
+
+    /* ================================================================
+       DRAWING
+       ================================================================ */
+    function drawBeaker() {
+      const { x, y, w, h, innerX, innerY, innerW, innerH } = beaker;
+      const lipH = h * 0.08;
+      const bottomArc = h * 0.04;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.12, y + lipH);
+      ctx.lineTo(x + w * 0.12, y + h - bottomArc);
+      ctx.quadraticCurveTo(x + w * 0.12, y + h, x + w * 0.22, y + h);
+      ctx.lineTo(x + w * 0.78, y + h);
+      ctx.quadraticCurveTo(x + w * 0.88, y + h, x + w * 0.88, y + h - bottomArc);
+      ctx.lineTo(x + w * 0.88, y + lipH);
+      ctx.strokeStyle = 'rgba(255,245,233,0.74)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,245,233,0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.18, y + lipH + 10);
+      ctx.lineTo(x + w * 0.18, y + h - 18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.80, y + lipH + 16);
+      ctx.lineTo(x + w * 0.80, y + h - 22);
+      ctx.stroke();
+
+      const level = innerY + innerH * 0.14;
+      const pH = calculatePH();
+      const mix = clamp(Math.abs(pH - 7) / 7, 0, 1);
+      const rxn = reactions[currentReaction];
+
+      // Liquid color shifts based on pH
+      let lr, lg, lb;
+      if (pH < 7) {
+        // More red/orange as more acidic
+        lr = 94 + mix * 60; lg = 117 - mix * 36; lb = 104 - mix * 40;
+      } else {
+        // More blue/teal as more basic
+        lr = 94 - mix * 30; lg = 117 + mix * 10; lb = 104 + mix * 60;
+      }
+      const grad = ctx.createLinearGradient(0, level, 0, innerY + innerH);
+      grad.addColorStop(0, 'rgba(' + Math.round(lr) + ',' + Math.round(lg) + ',' + Math.round(lb) + ',0.35)');
+      grad.addColorStop(1, 'rgba(55, 77, 69, 0.24)');
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(innerX, level);
+      ctx.lineTo(innerX + innerW, level);
+      ctx.lineTo(innerX + innerW, innerY + innerH);
+      ctx.lineTo(innerX, innerY + innerH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.ellipse(innerX + innerW / 2, level, innerW * 0.48, 10, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,245,233,0.18)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 6; i++) {
+        const yy = innerY + innerH * (i / 6);
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.13, yy);
+        ctx.lineTo(x + w * 0.16, yy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawParticle(p) {
+      ctx.save();
+      const rxn = reactions[currentReaction];
+      const wobble = Math.sin(t * 0.03 + p.phase) * 0.6;
+      const r = p.r + wobble * 0.3;
+
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, r * 2.8);
+      g.addColorStop(0, p.color + 'dd');
+      g.addColorStop(1, p.color + '00');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.beginPath();
+      ctx.arc(p.x - r * 0.3, p.y - r * 0.3, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Label
+      let label;
+      if (p.type === 'salt') label = rxn.saltLabel;
+      else if (p.type === 'water') label = 'H\u2082O';
+      else if (p.type === 'H') label = rxn.acidLabel;
+      else label = rxn.baseLabel;
+
+      const fontSize = label.length > 5 ? 8 : 10;
+      ctx.fillStyle = 'rgba(255,250,240,0.92)';
+      ctx.font = 'bold ' + fontSize + 'px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, p.x, p.y + r + 8);
+      ctx.restore();
+    }
+
+    /* ================================================================
+       PHYSICS Was SOOOO Hard to do
+       ================================================================ */
+    function bounce(p) {
+      const { innerX, innerY, innerW, innerH } = beaker;
+      const left = innerX + p.r;
+      const right = innerX + innerW - p.r;
+      const top = innerY + p.r;
+      const bottom = innerY + innerH - p.r;
+      if (p.x < left) { p.x = left; p.vx *= -1; }
+      if (p.x > right) { p.x = right; p.vx *= -1; }
+      if (p.y < top) { p.y = top; p.vy *= -1; }
+      if (p.y > bottom) { p.y = bottom; p.vy *= -1; }
+    }
+
+    function moveParticles(dt) {
+      for (const p of particles) {
+        const thermal = running && !paused ? 0.22 : 0.08;
+        const drift = (p.type === 'H' ? 0.02 : p.type === 'OH' ? -0.02 : 0.01);
+        p.vx += Math.cos(t * 0.008 + p.phase) * 0.002 * thermal;
+        p.vy += Math.sin(t * 0.007 + p.phase) * 0.002 * thermal + drift * 0.01;
+        const maxV = p.type === 'salt' ? 0.85 : p.type === 'water' ? 0.9 : 1.35;
+        p.vx = clamp(p.vx, -maxV, maxV);
+        p.vy = clamp(p.vy, -maxV, maxV);
+        p.x += p.vx * dt * 0.06;
+        p.y += p.vy * dt * 0.06;
+        bounce(p);
+      }
+    }
+
+    function reactCollisions() {
+      const rxn = reactions[currentReaction];
+      const reactionDistance = 16;
+      const prob = rxn.reactionProb;
+
+      for (let i = 0; i < particles.length; i++) {
+        const a = particles[i];
+        if (a.type !== 'H') continue;
+        for (let j = i + 1; j < particles.length; j++) {
+          const b = particles[j];
+          if (b.type !== 'OH') continue;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < reactionDistance * reactionDistance) {
+            // Apply reaction probability — weak acids/bases react less readily
+            if (Math.random() > prob) continue;
+
+            const midX = (a.x + b.x) / 2;
+            const midY = (a.y + b.y) / 2;
+            particles[i] = createParticle('water', midX + rand(-3, 3), midY + rand(-3, 3));
+            particles[j] = createParticle('salt', midX + rand(-3, 3), midY + rand(-3, 3));
+            counts.H = Math.max(0, counts.H - 1);
+            counts.OH = Math.max(0, counts.OH - 1);
+            counts.water += 1;
+            counts.salt += 1;
+            updateUI();
+            if ((counts.water + counts.salt) % 8 === 0) {
+              log(rxn.acidLabel + ' + ' + rxn.baseLabel + ' \u2192 ' + rxn.saltLabel + ' + H\u2082O  (' + counts.salt + ' pairs neutralized)');
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, 'rgba(101, 70, 62,0.02)');
+      grad.addColorStop(0.5, 'rgba(0,43,77,0.02)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = 'rgba(255,245,233,0.18)';
+      for (let i = 0; i < 90; i++) {
+        const x = (i * 97 + (t * 0.03)) % W;
+        const y = (i * 53 + (t * 0.02)) % H;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      ctx.restore();
+    }
+
+    /* ================================================================
+       MAIN LOOP
+       ================================================================ */
+    function loop(now) {
+      const dt = Math.min(32, now - last);
+      last = now;
+      if (!paused) t += dt;
+
+      drawBackground();
+      drawBeaker();
+
+      if (running && !paused) {
+        moveParticles(dt);
+        reactCollisions();
+        updateReactionState();
+      }
+
+      for (const p of particles) drawParticle(p);
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,245,233,0.50)';
+      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      const rxn = reactions[currentReaction];
+      ctx.fillText(rxn.acidLabel + ' + ' + rxn.baseLabel + ' neutralization in a glass beaker', W / 2, H * 0.08);
+      ctx.restore();
+
+      requestAnimationFrame(loop);
+    }
+
+    /* ================================================================
+       EVENT HANDLERS
+       ================================================================ */
+    function handleSliderInput(which, value) {
+      const n = clamp(parseInt(value || '0', 10) || 0, 0, 120);
+      if (which === 'H') {
+        totalAcid = n;
+        acidSlider.value = String(n);
+        acidNumber.value = String(n);
+        acidVal.textContent = String(n);
+        rebuildSide('H', n);
+      } else {
+        totalBase = n;
+        baseSlider.value = String(n);
+        baseNumber.value = String(n);
+        baseVal.textContent = String(n);
+        rebuildSide('OH', n);
+      }
+      updatePH();
+      updateReactionState();
+    }
+
+    acidSlider.addEventListener('input', e => handleSliderInput('H', e.target.value));
+    baseSlider.addEventListener('input', e => handleSliderInput('OH', e.target.value));
+    acidNumber.addEventListener('input', e => handleSliderInput('H', e.target.value));
+    baseNumber.addEventListener('input', e => handleSliderInput('OH', e.target.value));
+
+    startBtn.addEventListener('click', () => {
+      running = true;
+      paused = false;
+      startBtn.disabled = true;
+      pauseBtn.textContent = 'Pause';
+      stateText.textContent = 'Reaction in motion';
+      stateSub.textContent = 'Watch the collisions build products in real time.';
+      const rxn = reactions[currentReaction];
+      activityText.textContent = 'Reactive';
+      activityDot.style.background = '#9d4b41';
+      activityDot.style.boxShadow = '0 0 10px rgba(157,75,65,0.75)';
+      log('Start pressed. ' + rxn.acidLabel + ' and ' + rxn.baseLabel + ' are loose in the beaker.');
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (!running) return;
+      paused = !paused;
+      pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+      stateText.textContent = paused ? 'Paused' : 'Reaction in motion';
+      stateSub.textContent = paused ? 'Particle motion is frozen.' : 'Watch the collisions build products in real time.';
+      log(paused ? 'Simulation paused.' : 'Simulation resumed.');
+    });
+
+    resetBtn.addEventListener('click', () => {
+      reset();
+      startBtn.disabled = false;
+      log('System reset. Fresh beaker, fresh mix.');
+    });
+
+    /* ================================================================
+       INIT
+       ================================================================ */
+    window.addEventListener('resize', resize);
+    resize();
+    switchReaction('hcl-naoh');
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
